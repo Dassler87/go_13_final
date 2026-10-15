@@ -1,5 +1,5 @@
-# Сборка на Go 1.25
-FROM golang:1.25 AS builder
+# Сборка на Go 1.26
+FROM golang:1.26 AS builder
 
 # Внутри контейнера создаём папку  и выполняем оттуда все команды
 WORKDIR /app
