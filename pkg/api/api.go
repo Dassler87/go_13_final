@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 )
 
@@ -25,12 +24,6 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		deleteTaskHandler(w, r)
 	default:
-		writeJson(w, map[string]string{"error": "метод не поддерживается"})
+		writeError(w, http.StatusMethodNotAllowed, "метод не поддерживается")
 	}
-}
-
-// Отправляет данные как JSON и ставит правильный заголовок
-func writeJson(w http.ResponseWriter, data any) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	json.NewEncoder(w).Encode(data)
 }

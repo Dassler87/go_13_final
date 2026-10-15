@@ -37,13 +37,15 @@ func Tasks(limit int, search string) ([]*Task, error) {
 			limit,
 		)
 	} else {
-		// Проверяем, является ли search датой в формате 02.01.2006
-		t, perr := time.Parse("02.01.2006", search)
+		// Проверяем, является ли search датой
+		_, perr := time.Parse(DateLayout, search)
+
 		if perr == nil {
 			// Это дата — ищем точное совпадение
 			rows, err = db.Query(
 				"SELECT id, date, title, comment, repeat FROM scheduler WHERE date = ? ORDER BY date LIMIT ?",
-				t.Format("20060102"), limit,
+				search,
+				limit,
 			)
 		} else {
 			// Текстовый поиск по title и comment
@@ -83,37 +85,28 @@ func Tasks(limit int, search string) ([]*Task, error) {
 	return tasks, nil
 }
 
-// Получает задачу по ID. Если ID не число или задачи нет — возвращает ошибку
-func GetTask(id string) (*Task, error) {
+// Получает задачу по ID в виде int
+func GetTask(id int) (*Task, error) {
 	var task Task
-	var intID int
-	_, err := fmt.Sscanf(id, "%d", &intID)
-	if err != nil {
-		return nil, fmt.Errorf("неверный формат id")
-	}
+	var storedID int
 
 	query := `SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?`
-	err = db.QueryRow(query, intID).Scan(&intID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	err := db.QueryRow(query, id).Scan(&storedID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("Задача не найдена")
+			return nil, fmt.Errorf("задача не найдена")
 		}
 		return nil, err
 	}
-	task.ID = fmt.Sprintf("%d", intID)
+
+	task.ID = fmt.Sprintf("%d", storedID)
 	return &task, nil
 }
 
 // Обновляет задачу полностью. Если задачи нет — вернёт ошибку
-func UpdateTask(task *Task) error {
-	var intID int
-	_, err := fmt.Sscanf(task.ID, "%d", &intID)
-	if err != nil {
-		return fmt.Errorf("неверный формат id")
-	}
-
+func UpdateTask(task *Task, id int) error {
 	query := `UPDATE scheduler SET date = ?, title = ?, comment = ?, repeat = ? WHERE id = ?`
-	res, err := db.Exec(query, task.Date, task.Title, task.Comment, task.Repeat, intID)
+	res, err := db.Exec(query, task.Date, task.Title, task.Comment, task.Repeat, id)
 	if err != nil {
 		return err
 	}
@@ -123,21 +116,15 @@ func UpdateTask(task *Task) error {
 		return err
 	}
 	if count == 0 {
-		return fmt.Errorf("Задача не найдена")
+		return fmt.Errorf("задача не найдена")
 	}
 	return nil
 }
 
 // DeleteTask удаляет задачу по id
-func DeleteTask(id string) error {
-	var intID int
-	_, err := fmt.Sscanf(id, "%d", &intID)
-	if err != nil {
-		return fmt.Errorf("неверный формат id")
-	}
-
+func DeleteTask(id int) error {
 	query := `DELETE FROM scheduler WHERE id = ?`
-	res, err := db.Exec(query, intID)
+	res, err := db.Exec(query, id)
 	if err != nil {
 		return err
 	}
@@ -147,21 +134,15 @@ func DeleteTask(id string) error {
 		return err
 	}
 	if count == 0 {
-		return fmt.Errorf("Задача не найдена")
+		return fmt.Errorf("задача не найдена")
 	}
 	return nil
 }
 
 // UpdateDate обновляет только дату у задачи
-func UpdateDate(next string, id string) error {
-	var intID int
-	_, err := fmt.Sscanf(id, "%d", &intID)
-	if err != nil {
-		return fmt.Errorf("неверный формат id")
-	}
-
+func UpdateDate(next string, id int) error {
 	query := `UPDATE scheduler SET date = ? WHERE id = ?`
-	res, err := db.Exec(query, next, intID)
+	res, err := db.Exec(query, next, id)
 	if err != nil {
 		return err
 	}
@@ -171,7 +152,7 @@ func UpdateDate(next string, id string) error {
 		return err
 	}
 	if count == 0 {
-		return fmt.Errorf("Задача не найдена")
+		return fmt.Errorf("задача не найдена")
 	}
 	return nil
 }

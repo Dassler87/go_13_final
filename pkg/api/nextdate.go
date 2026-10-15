@@ -1,14 +1,16 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-)
 
-const DateLayout = "20060102"
+	"github.com/Dassler87/go_13_final/pkg/db"
+)
 
 // Сравнивает только даты (без времени)
 func afterNow(date, now time.Time) bool {
@@ -34,7 +36,7 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 		return "", fmt.Errorf("правило повторения не указано")
 	}
 
-	date, err := time.Parse(DateLayout, dstart)
+	date, err := time.Parse(db.DateLayout, dstart)
 	if err != nil {
 		return "", fmt.Errorf("неверный формат даты: %v", err)
 	}
@@ -102,8 +104,7 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 
 		var day [32]bool
 		var month [13]bool
-		var lastDay bool
-		var secondLastDay bool
+		var lastDay, secondLastDay bool
 
 		for _, s := range strings.Split(parts[1], ",") {
 			n, err := strconv.Atoi(s)
@@ -139,21 +140,32 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			}
 		}
 
+		// Защита от бесконечного цикла
+		maxIterations := 365 * 2
+		iterations := 0
+
 		for {
 			date = date.AddDate(0, 0, 1)
 			d := date.Day()
 			m := int(date.Month())
+
+			iterations++
+			if iterations > maxIterations {
+				return "", fmt.Errorf("не удалось подобрать подходящую дату в течение 2 лет по правилу %s", repeat)
+			}
 
 			if !month[m] {
 				continue
 			}
 
 			match := day[d]
+			// Проверка на последний день месяца
 			if !match && lastDay {
 				if d == daysInMonth(date) {
 					match = true
 				}
 			}
+			// Проверка на предпоследний день месяца
 			if !match && secondLastDay {
 				if d == daysInMonth(date)-1 {
 					match = true
@@ -169,11 +181,16 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 		return "", fmt.Errorf("неподдерживаемый формат правила: %s", rule)
 	}
 
-	return date.Format(DateLayout), nil
+	return date.Format(db.DateLayout), nil
 }
 
 // Обработчик считает следующую дату по правилам
 func NextDateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "метод не поддерживается. Требуется POST")
+		return
+	}
+
 	nowStr := r.FormValue("now")
 	date := r.FormValue("date")
 	repeat := r.FormValue("repeat")
@@ -183,19 +200,22 @@ func NextDateHandler(w http.ResponseWriter, r *http.Request) {
 		now = time.Now()
 	} else {
 		var err error
-		now, err = time.Parse(DateLayout, nowStr)
+		now, err = time.Parse(db.DateLayout, nowStr)
 		if err != nil {
-			http.Error(w, "неверный формат now", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "неверный формат даты now")
 			return
 		}
 	}
 
 	result, err := NextDate(now, date, repeat)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(result))
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	resp := map[string]string{"next_date": result}
+	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+		log.Printf("error encoding JSON for 200: %v", encErr)
+	}
 }
